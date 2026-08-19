@@ -1,0 +1,198 @@
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type"
+};
+
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      ...corsHeaders
+    }
+  });
+}
+
+export default {
+  async fetch(request, env) {
+
+    /*
+     * CORS preflight
+     */
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: corsHeaders
+      });
+    }
+
+    /*
+     * Only POST is allowed
+     */
+    if (request.method !== "POST") {
+      return json({
+        status: false,
+        message: "Method not allowed"
+      }, 405);
+    }
+
+    try {
+
+      const body = await request.json();
+
+      const {
+        email,
+        amount,
+        years
+      } = body;
+
+      /*
+       * Validate email
+       */
+      if (!email) {
+        return json({
+          status: false,
+          message: "Customer email is required"
+        }, 400);
+      }
+
+      /*
+       * Validate amount
+       *
+       * Paystack expects amount in the
+       * smallest currency unit.
+       *
+       * ₦215,000 = 21,500,000 kobo
+       */
+      if (
+        !Number.isInteger(amount) ||
+        amount <= 0
+      ) {
+        return json({
+          status: false,
+          message: "A valid amount is required"
+        }, 400);
+      }
+
+      /*
+       * Optional service period
+       */
+      if (
+        years !== undefined &&
+        (!Number.isInteger(years) || years <= 0)
+      ) {
+        return json({
+          status: false,
+          message: "Invalid service period"
+        }, 400);
+      }
+
+      /*
+       * Generate a unique reference
+       */
+      const reference =
+        `MCS-${Date.now()}-${crypto.randomUUID()
+          .replaceAll("-", "")
+          .slice(0, 12)}`;
+
+      /*
+       * Paystack transaction payload
+       */
+      const payload = {
+        email,
+        amount: String(amount),
+        currency: "NGN",
+        reference,
+
+        callback_url:
+          env.PAYMENT_CALLBACK_URL,
+
+        metadata: {
+          school: "Maiduguri Capital School",
+          service:
+            "Domain Name, VPS, Site Update and Maintenance",
+          years: years || null
+        }
+      };
+
+      /*
+       * Call Paystack
+       */
+      const response = await fetch(
+        "https://api.paystack.co/transaction/initialize",
+        {
+          method: "POST",
+
+          headers: {
+            "Authorization":
+              `Bearer ${env.PAYSTACK_SECRET_KEY}`,
+
+            "Content-Type":
+              "application/json"
+          },
+
+          body: JSON.stringify(payload)
+        }
+      );
+
+      const result =
+        await response.json();
+
+      /*
+       * Paystack returned an error
+       */
+      if (!response.ok || !result.status) {
+
+        console.error(
+          "Paystack initialization failed:",
+          result
+        );
+
+        return json({
+          status: false,
+          message:
+            result.message ||
+            "Unable to initialize payment"
+        }, response.status || 400);
+      }
+
+      /*
+       * Successful initialization
+       */
+      return json({
+        status: true,
+
+        message:
+          "Payment initialized successfully",
+
+        data: {
+          reference:
+            result.data.reference,
+
+          access_code:
+            result.data.access_code,
+
+          authorization_url:
+            result.data.authorization_url,
+
+          amount,
+
+          years: years || null
+        }
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Payment initialization error:",
+        error
+      );
+
+      return json({
+        status: false,
+        message: "Internal server error"
+      }, 500);
+    }
+  }
+};
