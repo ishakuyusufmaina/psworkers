@@ -1,0 +1,16 @@
+{
+  "name": "website-management-payments",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev:init": "npm run dev --workspace=payment-init",
+    "dev:webhook": "npm run dev --workspace=payment-webhook",
+    "deploy:init": "npm run deploy --workspace=payment-init",
+    "deploy:webhook": "npm run deploy --workspace=payment-webhook",
+    "deploy": "npm run deploy:init && npm run deploy:webhook"
+  },
+  "workspaces": [
+    "workers/payment-init",
+    "workers/payment-webhook"
+  ]
+}
