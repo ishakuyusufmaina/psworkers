@@ -1,0 +1,6 @@
+name = "mcs-payment-init"
+main = "src/index.js"
+compatibility_date = "2026-07-20"
+
+[vars]
+PAYMENT_CALLBACK_URL = "https://maiduguricapitalschool.com/payment/callback"
